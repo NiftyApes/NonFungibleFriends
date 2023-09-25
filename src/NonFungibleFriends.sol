@@ -2,7 +2,9 @@
 
 pragma solidity >=0.8.2 <0.9.0;
 
-contract C721 is Ownable {
+import "lib/openzeppelin-contracts/contracts/access/Ownable.sol";
+
+contract NonFungibleFriends is Ownable {
     address public protocolFeeDestination;
     uint256 public protocolFeePercent;
     uint256 public subjectFeePercent;
@@ -107,6 +109,7 @@ contract C721 is Ownable {
     // 1. Metadata URI
     function mintToken(address collectionId, uint256 amount) public payable {
         uint256 supply = mintedSupply[collectionId];
+        uint256 tSupply = totalSupply[collectionId];
         require(
             supply > 0 || collectionId == msg.sender,
             "Only the tokens' subject can buy the first token"
@@ -120,12 +123,12 @@ contract C721 is Ownable {
         );
 
         for (uint i; i < amount; i++) {
-            owners[collectionId][totalSupply] = msg.sender;
-            totalSupply[collectionId]++;
+            owners[collectionId][tSupply + i] = msg.sender;
         }
 
         balances[collectionId][msg.sender] += amount;
         mintedSupply[collectionId] += amount;
+        totalSupply[collectionId] += amount;
 
         emit Trade(
             msg.sender,
@@ -136,7 +139,7 @@ contract C721 is Ownable {
             protocolFee,
             subjectFee,
             supply + amount,
-            totalSupply
+            tSupply
         );
         (bool success1, ) = protocolFeeDestination.call{value: protocolFee}("");
         (bool success2, ) = collectionId.call{value: subjectFee}("");
@@ -145,9 +148,10 @@ contract C721 is Ownable {
 
     function burnTokens(
         address collectionId,
-        uint256[] tokenIds
+        uint256[] calldata tokenIds
     ) public payable {
         uint256 supply = mintedSupply[collectionId];
+        uint256 tSupply = totalSupply[collectionId];
         uint256 amount = tokenIds.length;
         require(supply > amount, "Cannot burn the last token");
         uint256 price = getPrice(supply - amount, amount);
@@ -175,7 +179,7 @@ contract C721 is Ownable {
             protocolFee,
             subjectFee,
             supply - amount,
-            totalSupply
+            tSupply
         );
         (bool success1, ) = msg.sender.call{
             value: price - protocolFee - subjectFee
@@ -187,12 +191,13 @@ contract C721 is Ownable {
 
     function transferTokens(
         address collectionId,
-        uint256[] tokenIds,
+        uint256[] calldata tokenIds,
         address to
     ) public payable {
         uint256 supply = mintedSupply[collectionId];
+        uint256 tSupply = totalSupply[collectionId];
         uint256 amount = tokenIds.length;
-        uint256 price = getPrice(supply, amount);
+        uint256 price = getPrice(mintedSupply[collectionId], amount);
         uint256 protocolFee = (price * protocolFeePercent) / 1 ether;
         uint256 subjectFee = (price * subjectFeePercent) / 1 ether;
         require(msg.value >= protocolFee + subjectFee, "Insufficient payment");
@@ -217,7 +222,7 @@ contract C721 is Ownable {
             protocolFee,
             subjectFee,
             supply,
-            totalSupply
+            tSupply
         );
         (bool success1, ) = protocolFeeDestination.call{value: protocolFee}("");
         (bool success2, ) = collectionId.call{value: subjectFee}("");
